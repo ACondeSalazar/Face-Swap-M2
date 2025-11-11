@@ -1,0 +1,7 @@
+torch
+torchvision
+numpy>=2.3.0
+pillow
+matplotlib
+facenet-pytorch
+tqdm
