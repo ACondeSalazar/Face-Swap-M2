@@ -1,7 +1,9 @@
 torch
 torchvision
-numpy>=2.3.0
+#numpy>=2.3.0
+numpy
 pillow
 matplotlib
 facenet-pytorch
 tqdm
+scikit-learn
