@@ -44,7 +44,7 @@ def make_dataset(data_dir, nb_images, image_size, trainsplit):
     complete_labels = torch.tensor(labels, dtype=torch.long)
 
     complete_faces = complete_faces.float()
-    complete_faces = (complete_faces/127.5) -1.0  #on normalise
+    #complete_faces = (complete_faces/127.5) -1.0  #on normalise
     #complete_faces = complete_faces / 255.0
 
     nb_classes = len(name_to_idx.keys())
