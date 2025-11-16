@@ -4,11 +4,11 @@ import torch
 from torch.utils.data import TensorDataset
 from facenet_pytorch import MTCNN, InceptionResnetV1
 from torch.utils.data import DataLoader, TensorDataset
+import numpy as np
 
 
 
-
-def make_dataset(data_dir, nb_images, image_size, trainsplit):
+def make_dataset(data_dir, nb_images, image_size, trainsplit, crop_faces = True):
     faces = []  # cropped
     labels = []  # index des personnes
     name_to_idx = {}  # mapping nom -> index
@@ -31,20 +31,26 @@ def make_dataset(data_dir, nb_images, image_size, trainsplit):
             fpath = os.path.join(person_dir, fname)
 
             try:
-                face = mtcnn(Image.open(fpath))
-                if face is None:
-                    print(f"face is none {fpath}")
-                    continue
-                faces.append(face)
+                img = Image.open(fpath)
+                if crop_faces:
+                    face = mtcnn(img)
+                    if face is None:
+                        print(f"face is none {fpath}")
+                        continue
+                    faces.append(face)
+                else:
+                    img = img.resize((image_size, image_size))
+                    faces.append(torch.tensor(np.array(img)).permute(2, 0, 1))
                 labels.append(idx)
-            except Exception:
+            except Exception as e:
+                print(f"Error processing {fpath}: {e}")
                 continue
 
     complete_faces = torch.stack(faces)
     complete_labels = torch.tensor(labels, dtype=torch.long)
 
     complete_faces = complete_faces.float()
-    #complete_faces = (complete_faces/127.5) -1.0  #on normalise
+    if not crop_faces : complete_faces = (complete_faces/127.5) -1.0  #on normalise
     #complete_faces = complete_faces / 255.0
 
     nb_classes = len(name_to_idx.keys())
