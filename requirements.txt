@@ -8,3 +8,4 @@ facenet-pytorch
 tqdm
 scikit-learn
 pytorch_metric_learning
+kagglehub
