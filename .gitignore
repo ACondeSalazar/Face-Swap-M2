@@ -3,3 +3,4 @@
 .vscode/
 classifier/dataset/LFW
 venv/
+models/
