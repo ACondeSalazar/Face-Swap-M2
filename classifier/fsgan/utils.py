@@ -10,7 +10,7 @@ import requests
 from tqdm import tqdm
 import torch.backends.cudnn as cudnn
 import torch.nn.init as init
-#from fsgan.utils.obj_factory import extract_args, obj_factory
+from fsgan.obj_factory import extract_args, obj_factory
 
 
 def init_weights(m, init_type='normal', gain=0.02):

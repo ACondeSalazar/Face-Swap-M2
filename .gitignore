@@ -5,3 +5,5 @@ classifier/dataset/LFW
 venv/
 models/
 *.pth
+
+!fsgan/models/
