@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from img_utils import create_pyramid
+from .img_utils import create_pyramid
 
 
 
