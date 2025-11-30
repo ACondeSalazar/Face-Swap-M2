@@ -5,9 +5,10 @@ This script should be placed in the root directory of the FSGAN repository.
 
 import os
 import argparse
-from classifier.fsgan.utils import download_from_url
+from utils import download_from_url
 import logging
 import traceback
+
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
