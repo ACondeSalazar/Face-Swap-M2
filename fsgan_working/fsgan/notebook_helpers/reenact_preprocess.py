@@ -27,22 +27,26 @@ def _import_detector():
         from fsgan.face_detection_dsfd.face_detector import FaceDetector
         return FaceDetector
     except Exception:
+        print("no detector")
         return None
 
 
-def detect_face_bbox(img_bgr: np.ndarray, detector=None, detection_model_path: Optional[str] = None,
+def detect_face_bbox(img_bgr: np.ndarray, detector=None, detection_model_path: Optional[str] = None, use_detector : bool = True,
                      verbose: int = 0) -> Optional[np.ndarray]:
     """Detect main face bbox in `img_bgr`.
 
     Returns bbox in [left, top, width, height] format or None on failure.
     """
     FaceDetector = _import_detector()
-    if FaceDetector is not None and detector is None:
+    # Create repo-local detector instance only when requested (use_detector=True)
+    if FaceDetector is not None and detector is None and use_detector:
         det_model_path = detection_model_path if detection_model_path is not None else os.path.join(
-            os.path.dirname(__file__), '..', '..', 'weights', 'WIDERFace_DSFD_RES152.pth')
+            os.path.dirname(__file__), '..', 'weights', 'WIDERFace_DSFD_RES152.pth')
+        #print("MODEL PATH IS ", det_model_path)
         try:
             detector = FaceDetector(detection_model_path=det_model_path, verbose=0)
         except Exception:
+            print( "detector is none")
             detector = None
 
     if detector is not None:
@@ -56,6 +60,7 @@ def detect_face_bbox(img_bgr: np.ndarray, detector=None, detection_model_path: O
             x1, y1, x2, y2 = d[:4]
             bboxes.append(np.array([x1, y1, x2 - x1, y2 - y1], dtype=int))
         main = get_main_bbox(bboxes, img_bgr.shape[:2])
+        print("face detected")
         return main
 
     # Fallback: center crop (half of min dimension)
@@ -63,12 +68,13 @@ def detect_face_bbox(img_bgr: np.ndarray, detector=None, detection_model_path: O
     size = int(min(h, w) * 0.6)
     left = (w - size) // 2
     top = (h - size) // 2
+    #print("face cropped")
     return np.array([left, top, size, size], dtype=int)
 
 
 def preprocess_image_for_generator(img_bgr: np.ndarray, landmarks_model: torch.nn.Module, g_model: torch.nn.Module,
                                    device: torch.device, resolution: int = 256, crop_scale: float = 1.2,
-                                   detector=None) -> Tuple[list, torch.Tensor]:
+                                   detector=None,use_detector : bool = True) -> Tuple[list, torch.Tensor]:
     """Perform canonical preprocessing for a single image.
 
     Returns (input_pyramid_list, original_cropped_bgr)
@@ -76,7 +82,7 @@ def preprocess_image_for_generator(img_bgr: np.ndarray, landmarks_model: torch.n
     - original_cropped_bgr: cropped+resized BGR numpy image (for reference / compositing)
     """
     # 1) Detect and crop
-    bbox = detect_face_bbox(img_bgr, detector=detector)
+    bbox = detect_face_bbox(img_bgr, detector=detector, use_detector=use_detector)
     if bbox is None:
         raise RuntimeError('No face detected and no fallback available')
 
@@ -189,9 +195,9 @@ def run_reenactment_simple(src_path: str, tgt_path: str, reenactment_ckpt: Optio
         raise RuntimeError('Failed reading input images: %s, %s' % (src_path, tgt_path))
 
     # Preprocess source: build input pyramid list
-    inp_pyd_src, src_crop = preprocess_image_for_generator(src_bgr, L, G, device, resolution, crop_scale, detector)
+    inp_pyd_src, src_crop = preprocess_image_for_generator(src_bgr, L, G, device, resolution, crop_scale, detector, use_detector=use_detector)
     # Preprocess target (we need target landmarks context): use target to get landmarks and contexts
-    inp_pyd_tgt, tgt_crop = preprocess_image_for_generator(tgt_bgr, L, G, device, resolution, crop_scale, detector)
+    inp_pyd_tgt, tgt_crop = preprocess_image_for_generator(tgt_bgr, L, G, device, resolution, crop_scale, detector, use_detector=use_detector)
 
     # For reenactment, generator expects source pyramid + target context. We already built input as image+context per level
     # Run generator: use source image but replace context with target context
@@ -227,7 +233,7 @@ def load_postprocessing_models(seg_ckpt: Optional[str] = None,
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') if device is None else device
 
     # default weight locations (relative to repo root)
-    repo_root = os.path.join(os.path.dirname(__file__), '..', '..')
+    repo_root = os.path.join(os.path.dirname(__file__), '..')
     if seg_ckpt is None:
         seg_ckpt = os.path.join(repo_root, 'weights', 'celeba_unet_256_1_2_segmentation_v2.pth')
     if inpaint_ckpt is None:
@@ -321,8 +327,12 @@ def run_full_pipeline(src_path: str, tgt_path: str,
                       blend_ckpt: Optional[str] = None,
                       resolution: int = 256, crop_scale: float = 1.2,
                       out_path: Optional[str] = None, device: Optional[torch.device] = None,
-                      use_detector: bool = True):
-    """Run full pipeline: preprocessing -> Gr -> segmentation -> Gc -> Gb -> composite.
+                      use_detector: bool = True, reenact: bool = True):
+    """Run full pipeline: preprocessing -> Gr (optional) -> segmentation -> Gc -> Gb -> composite.
+
+    If `reenact` is False the pipeline will skip running the reenactment generator and
+    use the source crop directly as the reenactment tensor (useful for plain faceswap
+    without reenactment transformations).
 
     Returns: (result_bgr, intermediates, cropped_src, cropped_tgt)
     """
@@ -330,13 +340,12 @@ def run_full_pipeline(src_path: str, tgt_path: str,
 
     # Load models
     if reenactment_ckpt is None:
-        reenactment_ckpt = os.path.join(os.path.dirname(__file__), '..', '..', 'weights',
-                                        'nfv_msrunet_256_1_2_reenactment_v2.1.pth')
+        reenactment_ckpt = os.path.join(os.path.dirname(__file__),'..', 'weights', 'nfv_msrunet_256_1_2_reenactment_v2.1.pth')
     G, ckpt = load_model(reenactment_ckpt, 'reenactment', device, return_checkpoint=True)
     G.eval()
 
     # Landmarks
-    lms_weights = os.path.join(os.path.dirname(__file__), '..', '..', 'weights', 'hr18_wflw_landmarks.pth')
+    lms_weights = os.path.join(os.path.dirname(__file__), '..', 'weights', 'hr18_wflw_landmarks.pth')
     L, _ = load_model(lms_weights, 'landmarks', device, return_checkpoint=True)
     L.eval()
 
@@ -344,9 +353,9 @@ def run_full_pipeline(src_path: str, tgt_path: str,
     src_bgr = cv2.imread(src_path)
     tgt_bgr = cv2.imread(tgt_path)
     inp_pyd_src, src_crop = preprocess_image_for_generator(src_bgr, L, G, device, resolution, crop_scale,
-                                                           detector=None if not use_detector else None)
+                                                           detector=None, use_detector=use_detector)
     inp_pyd_tgt, tgt_crop = preprocess_image_for_generator(tgt_bgr, L, G, device, resolution, crop_scale,
-                                                           detector=None if not use_detector else None)
+                                                           detector=None, use_detector=use_detector)
 
     # Build final input with source image channels and target context (same as earlier helper)
     final_input = []
@@ -355,12 +364,21 @@ def run_full_pipeline(src_path: str, tgt_path: str,
         ctx_ch = pt[:, 3:, :, :]
         final_input.append(torch.cat((img_ch, ctx_ch), dim=1))
 
+    # Run reenactment generator unless disabled. When reenact is False we'll reuse the
+    # source crop (converted to model range) as the reenactment tensor so postprocessing
+    # (segmentation/inpainting/blending) can still run and composite the source face into
+    # the target frame.
     with torch.no_grad():
-        out = G(final_input)
-    if isinstance(out, (list, tuple)):
-        out_tensor = out[-1]
-    else:
-        out_tensor = out
+        if reenact:
+            out = G(final_input)
+            if isinstance(out, (list, tuple)):
+                out_tensor = out[-1]
+            else:
+                out_tensor = out
+        else:
+            # convert src_crop (BGR numpy) to tensor in same range expected by postprocessing
+            src_frame = bgr2tensor(src_crop, normalize=True).to(device)  # shape [1,3,H,W]
+            out_tensor = src_frame
 
     # Load postprocessing models
     S, Gc, Gb, smooth_mask = load_postprocessing_models(seg_ckpt, inpaint_ckpt, blend_ckpt, device)
