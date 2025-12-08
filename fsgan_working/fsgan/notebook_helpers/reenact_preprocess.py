@@ -327,21 +327,28 @@ def run_full_pipeline(src_path: str, tgt_path: str,
                       blend_ckpt: Optional[str] = None,
                       resolution: int = 256, crop_scale: float = 1.2,
                       out_path: Optional[str] = None, device: Optional[torch.device] = None,
-                      use_detector: bool = True, reenact: bool = True):
+                      use_detector: bool = True, reenact: bool = True,
+                      G_model: Optional[torch.nn.Module] = None):
     """Run full pipeline: preprocessing -> Gr (optional) -> segmentation -> Gc -> Gb -> composite.
 
     If `reenact` is False the pipeline will skip running the reenactment generator and
     use the source crop directly as the reenactment tensor (useful for plain faceswap
     without reenactment transformations).
+    
+    If `G_model` is provided, it will be used instead of loading from reenactment_ckpt.
 
     Returns: (result_bgr, intermediates, cropped_src, cropped_tgt)
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') if device is None else device
 
-    # Load models
-    if reenactment_ckpt is None:
-        reenactment_ckpt = os.path.join(os.path.dirname(__file__),'..', 'weights', 'nfv_msrunet_256_1_2_reenactment_v2.1.pth')
-    G, ckpt = load_model(reenactment_ckpt, 'reenactment', device, return_checkpoint=True)
+    # Load models (or use provided model)
+    if G_model is not None:
+        G = G_model
+        print("Using provided G_model (e.g., finetuned)")
+    else:
+        if reenactment_ckpt is None:
+            reenactment_ckpt = os.path.join(os.path.dirname(__file__),'..', 'weights', 'nfv_msrunet_256_1_2_reenactment_v2.1.pth')
+        G, ckpt = load_model(reenactment_ckpt, 'reenactment', device, return_checkpoint=True)
     G.eval()
 
     # Landmarks
