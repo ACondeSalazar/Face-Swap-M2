@@ -4,3 +4,8 @@
 classifier/dataset/LFW
 venv/
 models/
+*.pth
+
+fsgan_working/outputs
+!fsgan/models/
+models/

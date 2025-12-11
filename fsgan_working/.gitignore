@@ -1,0 +1,8 @@
+.idea
+*.pyc
+__pycache__
+fsgan/experiments/results
+weights
+download_fsgan_models.py
+Face-Swap-M2-Dataset
+.venv
